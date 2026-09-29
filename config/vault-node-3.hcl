@@ -5,7 +5,7 @@ storage "consul" {
   scheme  = "https"
   
   # Token de ACL de Consul con permisos en el path "vault/"
-  token   = "c05bbfa4-ec2e-61be-0578-95cb55b35c89"
+  token   = "<consul token>"
 
   # Habilita la coordinación de Alta Disponibilidad (HA) mediante Consul
   ha_enabled = "true"
@@ -27,7 +27,7 @@ seal "transit" {
   disable_renewal = "false"
   key_name        = "autounseal-key"
   mount_path      = "transit"
-  token           = "hvs.CAESIDbiYqZ6sDjUa_AteJcTmdUYGYQnc2xHVATFYibo1TwdGh4KHGh2cy5HcVUwQ0JnYk9ybWx4OVpqSE9maE9ENDk"
+  token           = "<transit token>"
 }
 
 

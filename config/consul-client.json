@@ -10,10 +10,10 @@
     "default_policy": "deny",
     "enable_token_persistence": true,
     "tokens": {
-      "agent": "c05bbfa4-ec2e-61be-0578-95cb55b35c89"
+      "agent": "<consul token>"
     }
   },
-  "encrypt": "jolZfnihH0iLIlJ7GejpIZN2MIsKu9XowujIR/2l3/A=",
+  "encrypt": "<encrypted password>",
   "bind_addr": "0.0.0.0",
   "client_addr": "0.0.0.0",
   "ports": {
