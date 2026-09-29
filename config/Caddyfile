@@ -1,0 +1,38 @@
+# Ingress interno para Vault (UI / API)
+:8200 {
+    # log
+    reverse_proxy vault-node-1:8200 vault-node-2:8200 vault-node-3:8200 {
+        lb_policy round_robin
+
+        # standbyok=true le indica a Vault que devuelva 200 OK incluso en nodos Standby
+	# por defecto devuelve 429 en los nodos en Standby
+        health_uri /v1/sys/health?standbyok=true
+        health_interval 5s
+        health_timeout 2s
+
+        # (Opcional) Acepta explícitamente los códigos de estado tolerados por Vault
+        # health_status 200 429 472 473
+    }
+}
+
+:8501 {
+    # log
+    reverse_proxy https://consul-node-1:8501 https://consul-node-2:8501 https://consul-node-3:8501 {
+        lb_policy round_robin
+
+        # Pasa la cabecera de host requerida por los assets de Consul UI
+        header_up Host {upstream_hostport}
+
+        health_uri /v1/status/leader
+        health_interval 5s
+        health_timeout 2s
+
+        transport http {
+            # CA para confiar en el certificado presentado por Consul
+            tls_trusted_ca_certs /etc/caddy/certs/consul-agent-ca.pem
+            
+            # Certificado cliente + clave privada para mTLS saliente (Sintaxis oficial Caddy v2)
+            tls_client_auth /etc/caddy/certs/client.pem /etc/caddy/certs/client-key.pem
+        }
+    }
+}

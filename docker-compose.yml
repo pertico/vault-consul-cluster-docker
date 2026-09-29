@@ -1,0 +1,155 @@
+x-vault-node-base: &vault-node-base
+  image: hashicorp/vault:1.13.3
+  container_name: ${COMPOSE_PROJECT_NAME:-vault}-node-1
+  restart: unless-stopped
+  environment:
+    VAULT_ADDR: "http://127.0.0.1:8200"
+  networks:
+    - default
+  command: ["vault", "server", "-config=/etc/vault/vault.hcl"]
+  cap_add:
+    - IPC_LOCK
+
+x-consul-node-base: &consul-node-base
+    image: hashicorp/consul:2.0.3
+    restart: unless-stopped
+    environment:
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:-}      
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - default
+    command: "agent -bootstrap-expect=3"
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-proxy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vault.rule=Host(`vault.localhost`)"
+      - "traefik.http.routers.vault.entrypoints=web"
+      - "traefik.http.routers.vault.service=vault"
+      - "traefik.http.services.vault.loadbalancer.server.port=8200"
+      - "traefik.http.services.vault.loadbalancer.server.scheme=http"
+      - "traefik.http.routers.consul.rule=Host(`consul.localhost`)"
+      - "traefik.http.routers.consul.entrypoints=web"
+      - "traefik.http.routers.consul.service=consul"
+      - "traefik.http.services.consul.loadbalancer.server.port=8501"
+      - "traefik.http.services.consul.loadbalancer.server.scheme=http"
+
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs/consul-agent-ca.pem:/etc/caddy/certs/consul-agent-ca.pem:ro   
+      - ./certs/caddy.pem:/etc/caddy/certs/client.pem:ro
+      - ./certs/caddy-key.pem:/etc/caddy/certs/client-key.pem:ro   
+    networks:
+      - default
+      - proxy
+  consul-1:
+    <<: *consul-node-base
+    container_name: consul-node-1
+    environment:
+      CONSUL_HTTP_ADDR: "consul-node-1:8500"
+    volumes:
+     - ./config/consul-node-1.json:/consul/config/node.json
+     - ./certs/:/consul/config/certs/:ro
+     - ./acls/:/consul/config/acls/
+     - consul-1-data:/consul/data     
+
+  consul-2:
+    <<: *consul-node-base
+    container_name: consul-node-2
+    environment:
+      CONSUL_HTTP_ADDR: "consul-node-2:8500"
+    volumes:
+     - ./config/consul-node-2.json:/consul/config/node.json
+     - ./certs/:/consul/config/certs/:ro
+     - ./acls/:/consul/config/acls/
+     - consul-2-data:/consul/data     
+  consul-3:
+    <<: *consul-node-base
+    container_name: consul-node-3
+    environment:
+      CONSUL_HTTP_ADDR: "consul-node-3:8500"
+    volumes:
+     - ./config/consul-node-3.json:/consul/config/node.json
+     - ./certs/:/consul/config/certs/:ro
+     - ./acls/:/consul/config/acls/
+     - consul-3-data:/consul/data     
+  node-1:
+    <<: *vault-node-base
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-node-1
+    volumes:
+      - ./config/vault-node-1.hcl:/etc/vault/vault.hcl:ro
+      - ./certs/consul-agent-ca.pem:/vault/config/certs/consul-agent-ca.pem:ro
+      - ./certs/vault.pem:/vault/config/certs/client.pem:ro
+      - ./certs/vault-key.pem:/vault/config/certs/client-key.pem:ro
+  node-2:
+    <<: *vault-node-base
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-node-2
+    volumes:
+      - ./config/vault-node-2.hcl:/etc/vault/vault.hcl:ro
+      - ./certs/consul-agent-ca.pem:/vault/config/certs/consul-agent-ca.pem:ro
+      - ./certs/vault.pem:/vault/config/certs/client.pem:ro
+      - ./certs/vault-key.pem:/vault/config/certs/client-key.pem:ro
+  node-3:
+    <<: *vault-node-base
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-node-3
+    volumes:
+      - ./config/vault-node-3.hcl:/etc/vault/vault.hcl:ro
+      - ./certs/consul-agent-ca.pem:/vault/config/certs/consul-agent-ca.pem:ro
+      - ./certs/vault.pem:/vault/config/certs/client.pem:ro
+      - ./certs/vault-key.pem:/vault/config/certs/client-key.pem:ro
+  transit:
+    <<: *vault-node-base
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-transit
+    restart: always
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+      VAULT_TOKEN: "${TRANSIT_VAULT_TOKEN:-}"
+      VAULT_LOCAL_CONFIG: |
+        storage "file" {
+          path = "/vault/file"
+        }
+        listener "tcp" {
+          address     = "0.0.0.0:8200"
+          tls_disable = 1
+        }
+        ui = false
+    volumes:
+      - transit-data:/vault/file
+    command: server
+  consul-client:
+    image: hashicorp/consul:2.0.3
+    container_name: ${COMPOSE_PROJECT_NAME:-vault}-consul-client
+    restart: unless-stopped
+    environment:
+      CONSUL_HTTP_ADDR: "https://127.0.0.1:8501"
+      CONSUL_HTTP_TOKEN: "e95b599e-166e-7d80-08ad-aee76e7ddf19"
+      CONSUL_CACERT: "/consul/config/certs/consul-agent-ca.pem"
+      CONSUL_CLIENT_CERT: "/consul/config/certs/client.pem"
+      CONSUL_CLIENT_KEY: "/consul/config/certs/client-key.pem"
+    volumes:
+      - ./config/consul-client.json:/consul/config/client.json:ro
+      - ./certs/consul-agent-ca.pem:/consul/config/certs/consul-agent-ca.pem:ro
+      - ./certs/vault.pem:/consul/config/certs/client.pem:ro
+      - ./certs/vault-key.pem:/consul/config/certs/client-key.pem:ro
+    networks:
+      - default
+    command: "agent"
+volumes:
+  consul-1-data:
+  consul-2-data:
+  consul-3-data:
+  transit-data:
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-vault}-net
+    driver: bridge
+  proxy:
+    name: proxy-net
+    external: true
+      
